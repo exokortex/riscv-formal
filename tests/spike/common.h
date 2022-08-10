@@ -2,71 +2,71 @@
 #define require_extension(_ext) do { } while (0)
 #define require(_expression) do { if (!(_expression)) valid = false; } while (0)
 
-struct mmu_t
+typedef struct 
 {
 	uint64_t rdata, wdata, addr;
 	int8_t optype; // width in bytes, negative for write
+} mmu_t;
 
-	uint8_t load_uint8(uint64_t a) {
-		assert(optype == 0);
-		addr = a, optype = 1;
-		return rdata;
-	}
+uint8_t load_uint8(mmu_t* self, uint64_t a) {
+  assert(self->optype == 0);
+  self->addr = a, self->optype = 1;
+  return self->rdata;
+}
 
-	uint16_t load_uint16(uint64_t a) {
-		assert(optype == 0);
-		addr = a, optype = 2;
-		return rdata;
-	}
+uint16_t load_uint16(mmu_t* self, uint64_t a) {
+  assert(self->optype == 0);
+  self->addr = a, self->optype = 2;
+  return self->rdata;
+}
 
-	uint32_t load_uint32(uint64_t a) {
-		assert(optype == 0);
-		addr = a, optype = 4;
-		return rdata;
-	}
+uint32_t load_uint32(mmu_t* self, uint64_t a) {
+  assert(self->optype == 0);
+  self->addr = a, self->optype = 4;
+  return self->rdata;
+}
 
-	uint64_t load_uint64(uint64_t a) {
-		assert(optype == 0);
-		addr = a, optype = 8;
-		return rdata;
-	}
+uint64_t load_uint64(mmu_t* self, uint64_t a) {
+  assert(self->optype == 0);
+  self->addr = a, self->optype = 8;
+  return self->rdata;
+}
 
-	void store_uint8(uint64_t a, uint8_t d) {
-		assert(optype == 0);
-		addr = a, wdata = d, optype = -1;
-	}
+void store_uint8(mmu_t* self, uint64_t a, uint8_t d) {
+  assert(self->optype == 0);
+  self->addr = a, self->wdata = d, self->optype = -1;
+}
 
-	void store_uint16(uint64_t a, uint16_t d) {
-		assert(optype == 0);
-		addr = a, wdata = d, optype = -2;
-	}
+void store_uint16(mmu_t* self, uint64_t a, uint16_t d) {
+  assert(self->optype == 0);
+  self->addr = a, self->wdata = d, self->optype = -2;
+}
 
-	void store_uint32(uint64_t a, uint32_t d) {
-		assert(optype == 0);
-		addr = a, wdata = d, optype = -4;
-	}
+void store_uint32(mmu_t* self, uint64_t a, uint32_t d) {
+  assert(self->optype == 0);
+  self->addr = a, self->wdata = d, self->optype = -4;
+}
 
-	void store_uint64(uint64_t a, uint64_t d) {
-		assert(optype == 0);
-		addr = a, wdata = d, optype = -8;
-	}
+void store_uint64(mmu_t* self, uint64_t a, uint64_t d) {
+  assert(self->optype == 0);
+  self->addr = a, self->wdata = d, self->optype = -8;
+}
 
-	int8_t load_int8(uint64_t a) {
-		return load_uint8(a);
-	}
+int8_t load_int8(mmu_t* self, uint64_t a) {
+  return load_uint8(self, a);
+}
 
-	int16_t load_int16(uint64_t a) {
-		return load_uint16(a);
-	}
+int16_t load_int16(mmu_t* self, uint64_t a) {
+  return load_uint16(self, a);
+}
 
-	int32_t load_int32(uint64_t a) {
-		return load_uint32(a);
-	}
+int32_t load_int32(mmu_t* self, uint64_t a) {
+  return load_uint32(self, a);
+}
 
-	int64_t load_int64(uint64_t a) {
-		return load_uint64(a);
-	}
-};
+int64_t load_int64(mmu_t* self, uint64_t a) {
+  return load_uint64(self, a);
+}
 
 // ----- from riscv-isa-sim/riscv/decode.h with minor edits -----
 
@@ -74,9 +74,9 @@ typedef int64_t sreg_t;
 typedef uint64_t reg_t;
 typedef uint64_t freg_t;
 
-const int NXPR = 32;
-const int NFPR = 32;
-const int NCSR = 4096;
+#define NXPR (32)
+#define NFPR (32)
+#define NCSR (4096)
 
 #define X_RA 1
 #define X_SP 2
@@ -113,87 +113,82 @@ const int NCSR = 4096;
 #define PC_ALIGN 2
 
 typedef uint64_t insn_bits_t;
-class insn_t
-{
-public:
-  insn_t() { b = 0; }
-  insn_t(insn_bits_t bits) : b(bits) {}
-  insn_bits_t bits() { return b; }
-  int length() { return insn_length(b); }
-  int64_t i_imm() { return int64_t(b) >> 20; }
-  int64_t s_imm() { return x(7, 5) + (xs(25, 7) << 5); }
-  int64_t sb_imm() { return (x(8, 4) << 1) + (x(25,6) << 5) + (x(7,1) << 11) + (imm_sign() << 12); }
-  int64_t u_imm() { return int64_t(b) >> 12 << 12; }
-  int64_t uj_imm() { return (x(21, 10) << 1) + (x(20, 1) << 11) + (x(12, 8) << 12) + (imm_sign() << 20); }
-  uint64_t rd() { return x(7, 5); }
-  uint64_t rs1() { return x(15, 5); }
-  uint64_t rs2() { return x(20, 5); }
-  uint64_t rs3() { return x(27, 5); }
-  uint64_t rm() { return x(12, 3); }
-  uint64_t csr() { return x(20, 12); }
+typedef insn_bits_t insn_t;
 
-  int64_t rvc_imm() { return x(2, 5) + (xs(12, 1) << 5); }
-  int64_t rvc_zimm() { return x(2, 5) + (x(12, 1) << 5); }
-  int64_t rvc_addi4spn_imm() { return (x(6, 1) << 2) + (x(5, 1) << 3) + (x(11, 2) << 4) + (x(7, 4) << 6); }
-  int64_t rvc_addi16sp_imm() { return (x(6, 1) << 4) + (x(2, 1) << 5) + (x(5, 1) << 6) + (x(3, 2) << 7) + (xs(12, 1) << 9); }
-  int64_t rvc_lwsp_imm() { return (x(4, 3) << 2) + (x(12, 1) << 5) + (x(2, 2) << 6); }
-  int64_t rvc_ldsp_imm() { return (x(5, 2) << 3) + (x(12, 1) << 5) + (x(2, 3) << 6); }
-  int64_t rvc_swsp_imm() { return (x(9, 4) << 2) + (x(7, 2) << 6); }
-  int64_t rvc_sdsp_imm() { return (x(10, 3) << 3) + (x(7, 3) << 6); }
-  int64_t rvc_lw_imm() { return (x(6, 1) << 2) + (x(10, 3) << 3) + (x(5, 1) << 6); }
-  int64_t rvc_ld_imm() { return (x(10, 3) << 3) + (x(5, 2) << 6); }
-  int64_t rvc_j_imm() { return (x(3, 3) << 1) + (x(11, 1) << 4) + (x(2, 1) << 5) + (x(7, 1) << 6) + (x(6, 1) << 7) + (x(9, 2) << 8) + (x(8, 1) << 10) + (xs(12, 1) << 11); }
-  int64_t rvc_b_imm() { return (x(3, 2) << 1) + (x(10, 2) << 3) + (x(2, 1) << 5) + (x(5, 2) << 6) + (xs(12, 1) << 8); }
-  int64_t rvc_simm3() { return x(10, 3); }
-  uint64_t rvc_rd() { return rd(); }
-  uint64_t rvc_rs1() { return rd(); }
-  uint64_t rvc_rs2() { return x(2, 5); }
-  uint64_t rvc_rs1s() { return 8 + x(7, 3); }
-  uint64_t rvc_rs2s() { return 8 + x(2, 3); }
-//private:
-  insn_bits_t b;
-  uint64_t x(int lo, int len) { return (b >> lo) & ((insn_bits_t(1) << len)-1); }
-  uint64_t xs(int lo, int len) { return int64_t(b) << (64-lo-len) >> (64-len); }
-  uint64_t imm_sign() { return xs(63, 1); }
-};
+//insn_bits_t b;
+uint64_t x(insn_t self, int lo, int len) { return (self >> lo) & (((insn_bits_t)(1) << len)-1); }
+uint64_t xs(insn_t self, int lo, int len) { return (int64_t)(self) << (64-lo-len) >> (64-len); }
+uint64_t imm_sign(insn_t self) { return xs(self, 31, 1); }
+insn_bits_t bits(insn_t self) { return self; }
+int length(insn_t self) { return insn_length(self); }
+int64_t i_imm(insn_t self) { return (int64_t)(self) >> 20; }
+int64_t s_imm(insn_t self) { return x(self, 7, 5) + (xs(self, 25, 7) << 5); }
+int64_t sb_imm(insn_t self) { return (x(self, 8, 4) << 1) + (x(self, 25,6) << 5) + (x(self, 7,1) << 11) + (imm_sign(self) << 12); }
+int64_t u_imm(insn_t self) { return (int64_t)(self) >> 12 << 12; }
+int64_t uj_imm(insn_t self) { return (x(self, 21, 10) << 1) + (x(self, 20, 1) << 11) + (x(self, 12, 8) << 12) + (imm_sign(self) << 20); }
+uint64_t rd(insn_t self) { return x(self, 7, 5); }
+uint64_t rs1(insn_t self) { return x(self, 15, 5); }
+uint64_t rs2(insn_t self) { return x(self, 20, 5); }
+uint64_t rs3(insn_t self) { return x(self, 27, 5); }
+uint64_t rm(insn_t self) { return x(self, 12, 3); }
+uint64_t csr(insn_t self) { return x(self, 20, 12); }
+
+int64_t rvc_imm(insn_t self) { return x(self, 2, 5) + (xs(self, 12, 1) << 5); }
+int64_t rvc_zimm(insn_t self) { return x(self, 2, 5) + (x(self, 12, 1) << 5); }
+int64_t rvc_addi4spn_imm(insn_t self) { return (x(self, 6, 1) << 2) + (x(self, 5, 1) << 3) + (x(self, 11, 2) << 4) + (x(self, 7, 4) << 6); }
+int64_t rvc_addi16sp_imm(insn_t self) { return (x(self, 6, 1) << 4) + (x(self, 2, 1) << 5) + (x(self, 5, 1) << 6) + (x(self, 3, 2) << 7) + (xs(self, 12, 1) << 9); }
+int64_t rvc_lwsp_imm(insn_t self) { return (x(self, 4, 3) << 2) + (x(self, 12, 1) << 5) + (x(self, 2, 2) << 6); }
+int64_t rvc_ldsp_imm(insn_t self) { return (x(self, 5, 2) << 3) + (x(self, 12, 1) << 5) + (x(self, 2, 3) << 6); }
+int64_t rvc_swsp_imm(insn_t self) { return (x(self, 9, 4) << 2) + (x(self, 7, 2) << 6); }
+int64_t rvc_sdsp_imm(insn_t self) { return (x(self, 10, 3) << 3) + (x(self, 7, 3) << 6); }
+int64_t rvc_lw_imm(insn_t self) { return (x(self, 6, 1) << 2) + (x(self, 10, 3) << 3) + (x(self, 5, 1) << 6); }
+int64_t rvc_ld_imm(insn_t self) { return (x(self, 10, 3) << 3) + (x(self, 5, 2) << 6); }
+int64_t rvc_j_imm(insn_t self) { return (x(self, 3, 3) << 1) + (x(self, 11, 1) << 4) + (x(self, 2, 1) << 5) + (x(self, 7, 1) << 6) + (x(self, 6, 1) << 7) + (x(self, 9, 2) << 8) + (x(self, 8, 1) << 10) + (xs(self, 12, 1) << 11); }
+int64_t rvc_b_imm(insn_t self) { return (x(self, 3, 2) << 1) + (x(self, 10, 2) << 3) + (x(self, 2, 1) << 5) + (x(self, 5, 2) << 6) + (xs(self, 12, 1) << 8); }
+int64_t rvc_simm3(insn_t self) { return x(self, 10, 3); }
+uint64_t rvc_rd(insn_t self) { return rd(self); }
+uint64_t rvc_rs1(insn_t self) { return rd(self); }
+uint64_t rvc_rs2(insn_t self) { return x(self, 2, 5); }
+uint64_t rvc_rs1s(insn_t self) { return 8 + x(self, 7, 3); }
+uint64_t rvc_rs2s(insn_t self) { return 8 + x(self, 2, 3); }
 
 // helpful macros, etc
 #define MMU (mmu)
 #define STATE (post_state)
 #define READ_REG(reg) STATE.XPR[reg]
 #define READ_FREG(reg) STATE.FPR[reg]
-#define RS1 READ_REG(insn.rs1())
-#define RS2 READ_REG(insn.rs2())
-#define WRITE_RD(value) WRITE_REG(insn.rd(), value)
+#define RS1 READ_REG(rs1(insn))
+#define RS2 READ_REG(rs2(insn))
+#define WRITE_RD(value) WRITE_REG(rd(insn), value)
 
 #define WRITE_REG(reg, value) do { reg_t v = value; STATE.XPR[reg] = reg ? v : 0; } while (0)
 #define WRITE_FREG(reg, value) DO_WRITE_FREG(reg, value)
 
 // RVC macros
-#define WRITE_RVC_RS1S(value) WRITE_REG(insn.rvc_rs1s(), value)
-#define WRITE_RVC_RS2S(value) WRITE_REG(insn.rvc_rs2s(), value)
-#define WRITE_RVC_FRS2S(value) WRITE_FREG(insn.rvc_rs2s(), value)
-#define RVC_RS1 READ_REG(insn.rvc_rs1())
-#define RVC_RS2 READ_REG(insn.rvc_rs2())
-#define RVC_RS1S READ_REG(insn.rvc_rs1s())
-#define RVC_RS2S READ_REG(insn.rvc_rs2s())
-#define RVC_FRS2 READ_FREG(insn.rvc_rs2())
-#define RVC_FRS2S READ_FREG(insn.rvc_rs2s())
+#define WRITE_RVC_RS1S(value) WRITE_REG(rvc_rs1s(insn), value)
+#define WRITE_RVC_RS2S(value) WRITE_REG(rvc_rs2s(insn), value)
+#define WRITE_RVC_FRS2S(value) WRITE_FREG(rvc_rs2s(insn), value)
+#define RVC_RS1 READ_REG(rvc_rs1(insn))
+#define RVC_RS2 READ_REG(rvc_rs2(insn))
+#define RVC_RS1S READ_REG(rvc_rs1s(insn))
+#define RVC_RS2S READ_REG(rvc_rs2s(insn))
+#define RVC_FRS2 READ_FREG(rvc_rs2(insn))
+#define RVC_FRS2S READ_FREG(rvc_rs2s(insn))
 #define RVC_SP READ_REG(X_SP)
 
 // FPU macros
-#define FRS1 READ_FREG(insn.rs1())
-#define FRS2 READ_FREG(insn.rs2())
-#define FRS3 READ_FREG(insn.rs3())
+#define FRS1 READ_FREG(rs1(insn))
+#define FRS2 READ_FREG(rs2(insn))
+#define FRS3 READ_FREG(rs3(insn))
 #define dirty_fp_state (STATE.mstatus |= MSTATUS_FS | (xlen == 64 ? MSTATUS64_SD : MSTATUS32_SD))
 #define dirty_ext_state (STATE.mstatus |= MSTATUS_XS | (xlen == 64 ? MSTATUS64_SD : MSTATUS32_SD))
 #define DO_WRITE_FREG(reg, value) (STATE.FPR.write(reg, value), dirty_fp_state)
-#define WRITE_FRD(value) WRITE_FREG(insn.rd(), value)
+#define WRITE_FRD(value) WRITE_FREG(rd(insn), value)
 
-#define SHAMT (insn.i_imm() & 0x3F)
-#define BRANCH_TARGET (pc + insn.sb_imm())
-#define JUMP_TARGET (pc + insn.uj_imm())
-#define RM ({ int rm = insn.rm(); \
+#define SHAMT (i_imm(insn) & 0x3F)
+#define BRANCH_TARGET (pc + sb_imm(insn))
+#define JUMP_TARGET (pc + uj_imm(insn))
+#define RM ({ int rm = rm(insn); \
               if(rm == 7) rm = STATE.frm; \
               if(rm > 4) throw trap_illegal_instruction(); \
               rm; })
@@ -209,7 +204,7 @@ public:
 #define set_pc(x) do { STATE.pc = x; } while (0)
 
 
-// ----- from riscv-isa-sim/riscv/processor.h with minor edits -----
+// ----- from riscv-isa-sim/riscv/processor.h translated from C++ to C with minor edits -----
 
 typedef struct
 {
@@ -262,12 +257,8 @@ typedef struct
 // } mcontrol_t;
 
 // architectural state of a RISC-V hart
-struct state_t
+typedef struct
 {
-  void reset();
-
-  static const int num_triggers = 4;
-
   reg_t pc;
   reg_t XPR[NXPR];
   freg_t FPR[NFPR];
@@ -313,4 +304,4 @@ struct state_t
   } single_step;
 
   reg_t load_reservation;
-};
+} state_t;

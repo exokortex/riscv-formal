@@ -1,4 +1,4 @@
-test_*.cc
+test_*.c
 test_*.h
 test_*.ok
 test_*.v

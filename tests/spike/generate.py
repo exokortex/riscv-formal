@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import os
+from pathlib import Path
+import re
 
 isa = "rv32ic"
 
@@ -35,7 +37,7 @@ with open("makefile", "w") as makefile:
             if compressed: print("`define RISCV_FORMAL_COMPRESSED", file=f)
             print("`include \"../../insns/insn_%s.v\"" % insn, file=f)
 
-        with open("test_%s.cc" % insn, "w") as f:
+        with open("test_%s.c" % insn, "w") as f:
             print("// DO NOT EDIT -- auto-generated from riscv-formal/tests/spike/generate.py", file=f)
             print("#define xlen %d" % xlen, file=f)
             print("#define value_xlen value_%d_0" % (xlen-1), file=f)
@@ -51,16 +53,16 @@ with open("makefile", "w") as makefile:
             print("  pre_state.XPR[0] = 0;", file=f)
             for i in range(1, 32):
                 print("  pre_state.XPR[%d] = sext_xlen(pre_state.XPR[%d]);" % (i, i), file=f)
-            print("  insn.b = sext32(insn.b);", file=f)
-            print("  const reg_t &pc = pre_state.pc;", file=f)
-            print("  reg_t npc = pc + insn.length();", file=f)
+            print("  insn = sext32(insn);", file=f)
+            print("  reg_t pc = pre_state.pc;", file=f)
+            print("  reg_t npc = pre_state.pc + length(insn);", file=f)
             print("  state_t post_state = pre_state;", file=f)
             print("  post_state.pc = npc;", file=f)
-            print("  rvfi_insn_%s_state_t model = { };" % insn, file=f)
-            print("  bool valid = (insn.bits() & MASK_%s) == MATCH_%s;" % (insn.upper(), insn.upper()), file=f)
-            print("  if (((insn.bits() & 3) != 3) && ((insn.bits() >> 16) != 0)) valid = false;", file=f)
+            print("  struct rvfi_insn_%s_state_t model = { };" % insn, file=f)
+            print("  bool valid = (bits(insn) & MASK_%s) == MATCH_%s;" % (insn.upper(), insn.upper()), file=f)
+            print("  if (((bits(insn) & 3) != 3) && ((bits(insn) >> 16) != 0)) valid = false;", file=f)
             print("  model.rvfi_valid.value_0_0 = 1;", file=f)
-            print("  model.rvfi_insn.value_31_0 = insn.bits();", file=f)
+            print("  model.rvfi_insn.value_31_0 = bits(insn);", file=f)
             print("  model.rvfi_pc_rdata.value_xlen = pre_state.pc;", file=f)
             print("  rvfi_insn_%s_init(&model);" % insn, file=f)
             print("  model.rvfi_rs1_rdata.value_xlen = pre_state.XPR[model.spec_rs1_addr.value_4_0];", file=f)
@@ -69,15 +71,30 @@ with open("makefile", "w") as makefile:
             print("  rvfi_insn_%s_eval(&model);" % insn, file=f)
             if insn == "c_lui":
                 print("if (insn.rvc_rd() == 2) valid = false;", file=f)
-                print("#include \"riscv-isa-sim/riscv/insns/c_lui.h\"", file=f)
+                #print("#include \"riscv-isa-sim/riscv/insns/c_lui.h\"", file=f)
+                fname = 'riscv-isa-sim/riscv/insns/c_lui.h'
             elif insn == "c_addi16sp":
                 print("if (insn.rvc_rd() != 2) valid = false;", file=f)
-                print("#include \"riscv-isa-sim/riscv/insns/c_lui.h\"", file=f)
+                #print("#include \"riscv-isa-sim/riscv/insns/c_lui.h\"", file=f)
+                fname = 'riscv-isa-sim/riscv/insns/c_lui.h'
             else:
-                print("#include \"riscv-isa-sim/riscv/insns/%s.h\"" % insn, file=f)
+                #print("#include \"riscv-isa-sim/riscv/insns/%s.h\"" % insn, file=f)
+                fname = "riscv-isa-sim/riscv/insns/%s.h" % insn
+            code = Path(fname).read_text()
+            print(f"========== {fname:>20}\n{code.strip()}")
+            # monkey patch C++ -> C
+            code = re.sub(r'insn\.(\w+)\(\)', r'\1(insn)', code)
+            code = re.sub(r'MMU\.(\w+)\(\)', r'\1(&MMU)', code)
+            code = re.sub(r'insn\.(\w+)\(', r'\1(insn, ', code)
+            code = re.sub(r'MMU\.(\w+)\(', r'\1(&MMU, ', code)
+            code = re.sub(r'sreg_t\(', r'(sreg_t)(', code)
+            code = re.sub(r'([^s]?)reg_t\(', r'\1(reg_t)(', code)
+            print(f"-----------\n{code.strip()}\n")
+            print(code, file=f)
+
             print("  if ((post_state.pc & %d) != 0) valid = false;" % (1 if compressed else 3), file=f)
             print("  printf(\"int main() {\\n\"", file=f)
-            print("         \"  insn_t insn(%u);\\n\"", file=f)
+            print("         \"  insn_t insn = %u;\\n\"", file=f)
             print("         \"  state_t state = { };\\n\"", file=f)
             print("         \"  mmu_t mmu = { };\\n\"", file=f)
             print("         \"  state.pc = %u;\\n\"", file=f)
@@ -86,14 +103,14 @@ with open("makefile", "w") as makefile:
             print("         \"  mmu.rdata = %u;\\n\"", file=f)
             print("         \"  test_%s(mmu, state, insn);\\n\"" % insn, file=f)
             print("         \"  return 0;\\n\"", file=f)
-            print("         \"}\\n\", int(insn.bits()), int(pre_state.pc),", file=f)
-            print("         int(model.spec_rs1_addr.value_4_0), int(pre_state.XPR[model.spec_rs1_addr.value_4_0]),", file=f)
-            print("         int(model.spec_rs2_addr.value_4_0), int(pre_state.XPR[model.spec_rs2_addr.value_4_0]),", file=f)
-            print("         int(mmu.rdata));", file=f)
-            print("  // printf(\"valid: spike=%d riscv-formal=%d\\n\", int(valid), int(model.spec_valid.value_0_0));", file=f)
-            print("  // printf(\"rs1_addr: riscv-formal=%u\\n\", int(model.spec_rs1_addr.value_4_0));", file=f)
-            print("  // printf(\"rs2_addr: riscv-formal=%u\\n\", int(model.spec_rs2_addr.value_4_0));", file=f)
-            print("  // printf(\"rd_addr: riscv-formal=%u\\n\", int(model.spec_rd_addr.value_4_0));", file=f)
+            print("         \"}\\n\", (int)(bits(insn)), (int)(pre_state.pc),", file=f)
+            print("         (int)(model.spec_rs1_addr.value_4_0), (int)(pre_state.XPR[model.spec_rs1_addr.value_4_0]),", file=f)
+            print("         (int)(model.spec_rs2_addr.value_4_0), (int)(pre_state.XPR[model.spec_rs2_addr.value_4_0]),", file=f)
+            print("         (int)(mmu.rdata));", file=f)
+            print("  // printf(\"valid: spike=%d riscv-formal=%d\\n\", (int)(valid), (int)(model.spec_valid.value_0_0));", file=f)
+            print("  // printf(\"rs1_addr: riscv-formal=%u\\n\", (int)(model.spec_rs1_addr.value_4_0));", file=f)
+            print("  // printf(\"rs2_addr: riscv-formal=%u\\n\", (int)(model.spec_rs2_addr.value_4_0));", file=f)
+            print("  // printf(\"rd_addr: riscv-formal=%u\\n\", (int)(model.spec_rd_addr.value_4_0));", file=f)
             print("  // printf(\"rs1_rdata: spike=0x%016llx\\n\", (long long)pre_state.XPR[model.spec_rs1_addr.value_4_0]);", file=f)
             print("  // printf(\"rs2_rdata: spike=0x%016llx\\n\", (long long)pre_state.XPR[model.spec_rs2_addr.value_4_0]);", file=f)
             print("  // printf(\"rd_wdata: spike=0x%016llx riscv-formal=0x%016llx\\n\", (long long)post_state.XPR[model.spec_rd_addr.value_4_0], (long long)model.spec_rd_wdata.value_xlen);", file=f)
@@ -103,7 +120,7 @@ with open("makefile", "w") as makefile:
             if check_pc:
                 print("    assert(zext_xlen(post_state.pc) == model.spec_pc_wdata.value_xlen);", file=f)
             if check_rd:
-                print("    assert(post_state.XPR[model.spec_rd_addr.value_4_0] == (reg_t)sext_xlen(model.spec_rd_wdata.value_xlen));", file=f)
+                print("    assert(sext_xlen(post_state.XPR[model.spec_rd_addr.value_4_0]) == (reg_t)sext_xlen(model.spec_rd_wdata.value_xlen));", file=f)
             if check_regs:
                 for i in range(0, 32):
                     print("    if (model.spec_rd_addr.value_4_0 != %d) assert(post_state.XPR[%d] == pre_state.XPR[%d]);" % (i, i, i), file=f)
@@ -139,7 +156,7 @@ with open("makefile", "w") as makefile:
         print("all:: test_%s.ok" % insn, file=makefile)
 
         print("test_%s.ok: test_%s.h common.h riscv-isa-sim" % (insn, insn), file=makefile)
-        print("\ttime cbmc --trace --stop-on-fail --no-built-in-assertions --function test_%s test_%s.cc | ts -s '%%H:%%M:%%S [%s]' | tee test_%s.cbmc_out" % (insn, insn, insn, insn), file=makefile)
+        print("\tcbmc --trace --stop-on-fail --no-built-in-assertions --function test_%s test_%s.c | ts -s '%%H:%%M:%%S [%s]' | tee test_%s.cbmc_out" % (insn, insn, insn, insn), file=makefile)
         print("\tgrep 'VERIFICATION SUCCESSFUL' test_%s.cbmc_out" % insn, file=makefile)
         print("\tmv test_%s.cbmc_out test_%s.ok" % (insn, insn), file=makefile)
 
@@ -147,9 +164,11 @@ with open("makefile", "w") as makefile:
         print(("\tyosys -ql test_%s.yslog -p 'synth -top rvfi_insn_%s; opt_clean -purge; " +
                 "write_simplec -i64 test_%s.h' test_%s.v") % (insn, insn, insn, insn), file=makefile)
 
+        print("headers:: test_%s.h" % (insn), file=makefile)
+
     print("clean:", file=makefile)
     print("\trm -f test_*.ok test_*.h test_*.yslog test_*.cbmc_out", file=makefile)
 
     print("mrproper: clean", file=makefile)
-    print("\trm -rf test_*.cc test_*.v riscv-isa-sim makefile", file=makefile)
+    print("\trm -rf test_*.c test_*.v riscv-isa-sim makefile", file=makefile)
 
